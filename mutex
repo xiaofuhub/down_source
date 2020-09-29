@@ -1,0 +1,159 @@
+/***MyMutex.h头文件***/
+
+#ifndef __MY_MUTEX_H
+#define __MY_MUTEX_H
+#include <windows.h>
+
+class CMyMutex
+{
+public:
+    CMyMutex();
+
+    virtual ~CMyMutex();
+
+    void Lock();
+
+    void UnLock();
+
+private:
+    HANDLE m_hMutex;
+};
+
+class CAutoLock
+{
+public:
+    CAutoLock(CMyMutex* pMutex);
+
+    virtual ~CAutoLock();
+
+private:
+    CMyMutex*           m_pMutex;
+};
+
+#endif;
+/***MyMutex.cpp文件***/
+
+#include <iostream>
+#include <windows.h>
+#include "MyMutex.h"
+
+using namespace std;
+
+CMyMutex::CMyMutex()
+{
+    m_hMutex = CreateMutex(NULL               /*默认安全属性*/
+                        , false               /*创建线程不拥有该信号量*/
+                        , NULL                /*锁名称*/
+                        );
+}
+
+CMyMutex::~CMyMutex()
+{
+    if(NULL != m_hMutex)
+    {
+        CloseHandle(m_hMutex);
+        cout<<"m_hMutex被关闭"<<endl;
+    }
+}
+
+void CMyMutex::Lock()
+{
+    if(NULL == m_hMutex)
+    {
+        cout<<"m_hMutex为空"<<endl;
+        return;
+    }
+    DWORD dRes = -1;
+    dRes = WaitForSingleObject(m_hMutex, INFINITE);
+    if(WAIT_OBJECT_0  == dRes)
+    {
+//      cout<<"上锁成功!"<<endl;
+    }
+    else if(WAIT_ABANDONED == dRes)
+    {
+        cout<<"发生锁死现象"<<endl;
+    }
+    else if(WAIT_TIMEOUT == dRes)
+    {
+        cout<<"等待超时"<<endl;
+    }
+    else if(WAIT_FAILED == dRes)
+    {
+        cout<<"发生错误"<<endl;
+    }
+    else
+    {
+        cout<<"上锁失败!"<<endl;
+    }
+
+}
+
+void CMyMutex::UnLock()
+{
+    ReleaseMutex(m_hMutex);
+}
+
+//****************************CAutoLock*****************************************
+CAutoLock::CAutoLock(CMyMutex* pMutex)
+{
+    m_pMutex = pMutex;
+    m_pMutex->Lock();
+}
+
+CAutoLock::~CAutoLock()
+{
+    m_pMutex->UnLock();
+}
+/***main.cpp文件***/
+#include <iostream>
+#include <windows.h>
+#include "MySemaphore.h"
+#include "MyMutex.h"
+using namespace std;
+
+CMyMutex        MyMutex;/*声明一个全局的互斥量对象（自己封装的）*/
+
+DWORD WINAPI Fun(LPVOID lpParamter)
+{
+    string strPrint((const char*)lpParamter);
+    int iRunTime = 0;
+    //执行100次跳出
+    while(++iRunTime<100)
+    {
+        /*利用CMyMutex的构造函数和析构函数分别取创建和关闭互斥量
+          利用CAutoLock的构造和析构函数去WaitForSingleObject和ReleaseMutex互斥量
+        */
+        CAutoLock cLock(&MyMutex);
+        cout <<"["<< iRunTime <<"]:"<< strPrint.c_str()<<endl;
+        //线程函数阻塞，交出CPU使用权限
+        Sleep(10);
+    }
+    return 0;
+}
+
+int main()
+{
+    //创建子线程
+    string str1 = "A";
+    string str2 = "B";
+    string str3 = "C";
+    string str4 = "D";
+    string str5 = "E";
+
+    HANDLE hThread1 = CreateThread(NULL, 0, Fun, (void*)str1.c_str(), 0, NULL);
+    HANDLE hThread2 = CreateThread(NULL, 0, Fun, (void*)str2.c_str(), 0, NULL);
+    HANDLE hThread3 = CreateThread(NULL, 0, Fun, (void*)str3.c_str(), 0, NULL);
+    HANDLE hThread4 = CreateThread(NULL, 0, Fun, (void*)str4.c_str(), 0, NULL);
+    HANDLE hThread5 = CreateThread(NULL, 0, Fun, (void*)str5.c_str(), 0, NULL);
+
+    //关闭线程
+    CloseHandle(hThread1);
+    CloseHandle(hThread2);
+    CloseHandle(hThread3);
+    CloseHandle(hThread4);
+    CloseHandle(hThread5);
+
+    getchar();
+//  system("pause");
+    return 0;
+}
